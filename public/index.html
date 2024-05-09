@@ -1,0 +1,119 @@
+<link rel="stylesheet" href="https://unpkg.com/@picocss/pico@latest/css/pico.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.5.1/socket.io.js" integrity="sha512-9mpsATI0KClwt+xVZfbcf2lJ8IFBAwsubJ6mI3rtULwyM3fBmQFzj0It4tGqxLOGQwGfJdk/G+fANnxfq9/cew==" crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/axios/0.27.2/axios.min.js"></script>
+<script src="https://unpkg.com/vue@3"></script>
+
+<body>
+    <main class="container" id="app">
+      <article class="grid" v-if="layout == 'login'">
+        <div>
+          <hgroup>
+            <h1>Sign in</h1>
+            <h2>A minimalist layout for Login pages</h2>
+          </hgroup>
+          <form @submit.prevent="login">
+            <input type="text" name="login" placeholder="Login" aria-label="Login" autocomplete="nickname" required v-model="email">
+            <input type="password" name="password" placeholder="Password" aria-label="Password" autocomplete="current-password" required v-model="password">
+            <button class="contrast">Login</button>
+          </form>
+        </div>
+        <div>
+
+        </div>
+      </article>
+      <article v-else>
+        <h1>Créer un utilisateur</h1>
+        <form @submit.prevent="create">
+          <input type="text" placeholder="Name" required v-model="newUser.name">
+          <input type="text" placeholder="Email" required v-model="newUser.email">
+          <input type="text" placeholder="Password" required v-model="newUser.password">
+          <button class="contrast">Créer</button>
+        </form>
+        <h1>Utilisateur existant</h1>
+        <table>
+          <thead>
+            <tr>
+              <th scope="col">#</th>
+              <th scope="col">Name</th>
+              <th scope="col">Email</th>
+              <th scope="col">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr v-for="user in users">
+              <td>{{ user._id }}</td>
+              <td>{{ user.name }}</td>
+              <td>{{ user.email }}</td>
+              <td><button @click="remove(user._id)">Supprimer</button></td>
+            </tr>
+          </tbody>
+        </table>
+      </article>
+    </main>
+  </body>
+
+<script>
+const { createApp } = Vue
+
+const socket = io()
+
+createApp({
+  data() {
+    return {
+      layout: 'login',
+      email: '',
+      password: '',
+      users: [],
+      newUser: {},
+      userToken: ''
+    }
+  },
+  mounted() {
+    this.load()
+  },
+  methods: {
+    async login() {
+      const { token } = await axios.post('/login', {
+        email: this.email,
+        password: this.password
+      }).then(res => res.data)
+      localStorage.setItem('token', token)
+      this.load()
+    },
+    async load() {
+      this.userToken = localStorage.getItem('token')
+      if (this.userToken) {
+        this.layout = 'list'
+        const users = await axios.get('/api/users', {
+          headers: {
+            'x-access-token': this.userToken
+          }
+        }).then(res => res.data)
+        this.users = users
+      }
+
+      socket.on('user:create', (data) => {
+        this.users.push(data)
+      })
+
+      socket.on('user:delete', (data) => {
+        this.users = this.users.filter(user => user._id != data.id)
+      })
+    },
+    async remove(userId) {
+      await axios.delete('/api/users/' + userId, {
+          headers: {
+            'x-access-token': this.userToken
+          }
+      })
+    },
+    async create() {
+      await axios.post('/api/users', this.newUser, {
+          headers: {
+            'x-access-token': this.userToken
+          }
+      }).then(res => res.data)
+    }
+  }
+}).mount('#app')
+</script>
